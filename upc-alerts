@@ -67,14 +67,39 @@ def is_next_active(soup):
     else:
         return False
 
+def handle_alert(result):
+    days_left = "next version"
+    MESSAGE = "Total time spent calling international numbers: " + str(result) + ". Billing period ends on the 20th of each month"
+
+    SUBJECT = "UPC International Calls Usage Alert: " + str(result) + " minutes"
+    conn = boto.sns.connect_to_region( REGION )
+    pub = conn.publish (topic = TOPIC, message = MESSAGE, subject = SUBJECT)
 
 def report_result(result):
     timestamp = datetime.datetime.now()
     connection = boto.ec2.cloudwatch.connect_to_region('eu-west-1')
     connection.put_metric_data('Wojteks Metrics','UPC',result,timestamp)
+    
 
+    with open('/tmp/upc-alert.log','a+') as temp_log:
+        try:
+           last_result = int(temp_log.readlines()[-1])
+        except IndexError:
+           last_result = 0     
+        temp_log.write(str(result)+ '\n')
+        print "Last" + str(last_result)
+        print type(last_result)
+ 
+        if last_result>200 and last_result<=300:
+            if result > 300: handle_alert(result)
+        elif last_result>300 and last_result<=350:
+            if result > 350: handle_alert(result) 
+        elif last_result>350:
+            handle_alert(result) 
+        else:
+            handle_alert(result)
     #also print to stdout for debugging
-    print result
+
 
 def find_unbilled_usage(browser):
     
