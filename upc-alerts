@@ -1,6 +1,6 @@
 #!/usr/bin/python
 #
-#Password file .netrc reqired om tje same folder
+#Password file .netrc reqired in home folder 
 #Formato of password file: machine myupc.com login UPC_USER password UPC_PASSWORD
 #
 
