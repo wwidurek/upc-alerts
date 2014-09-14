@@ -71,7 +71,7 @@ def handle_alert(result):
     days_left = "next version"
     MESSAGE = "Total time spent calling international numbers: " + str(result) + ". Billing period ends on the 20th of each month"
 
-    SUBJECT = "UPC International Calls Usage Alert: " + str(result) + " minutes"
+    SUBJECT = "UPC International Calls Usage Alert: " + str(result) + " minutes (out of 400)"
     conn = boto.sns.connect_to_region( REGION )
     pub = conn.publish (topic = TOPIC, message = MESSAGE, subject = SUBJECT)
 
