@@ -1,0 +1,141 @@
+#!/usr/bin/python
+#
+#Password file .netrc reqired om tje same folder
+#Formato of password file: machine myupc.com login UPC_USER password UPC_PASSWORD
+#
+
+import requests
+from pyvirtualdisplay import Display
+from bs4 import BeautifulSoup
+from selenium import webdriver
+import boto.sns
+import boto.ec2.cloudwatch
+import json
+import datetime
+from selenium.common.exceptions import NoSuchElementException
+import netrc
+
+REGION = 'eu-west-1'
+TOPIC = 'arn:aws:sns:eu-west-1:869503260977:upc_call_monitor'
+HOST = 'myupc.com'
+
+UPC_USER = ""
+UPC_PASSWORD = ""
+UPC_TEMP = ""
+
+def set_credentials():
+    secret = netrc.netrc()
+    UPC_USER, UPC_TEMP,UPC_PASSWORD = secret.authenticators( HOST ) 
+    return UPC_USER, UPC_PASSWORD
+
+#calculate total minutes on the current_page
+def calculate_time( current_page ):
+    current_minutes = 0
+    current_time = 0
+    total_time = 0
+    
+    for tr in current_page:
+       cell = tr.findAll('td')
+       i = 0
+       for td in cell:
+          i = i + 1
+          if i == 4:
+             time = td.get_text().split(':')
+             current_time = current_time + int(time[0])*3600+int(time[1])*60+int(time[2])
+             i = 0
+
+    current_minutes = current_time/60
+    return current_minutes
+
+#def is_next_present(browser):
+#    try:
+#        browser.find_element_by_css_selector('#usage-details-table_012042736_1_next')
+#    except NoSuchElementException:
+#        return False
+#    return True
+
+def is_next_displayed(browser):
+    try:
+        if browser.find_element_by_css_selector('#usage-details-table_012042736_1_next').is_displayed(): return True
+        else: return False
+    except NoSuchElementException:
+        return False
+
+def is_next_active(soup):
+    if ('enabled' in str(soup.find(id="usage-details-table_012042736_1_next"))):
+        return True
+    else:
+        return False
+
+
+def report_result(result):
+    timestamp = datetime.datetime.now()
+    connection = boto.ec2.cloudwatch.connect_to_region('eu-west-1')
+    connection.put_metric_data('Wojteks Metrics','UPC',result,timestamp)
+
+    #also print to stdout for debugging
+    print result
+
+def find_unbilled_usage(browser):
+    
+
+    if (is_next_displayed(browser) == False):
+        browser.get('https://service.upc.ie/my-upc')
+  
+        browser.find_element_by_id('email').send_keys(UPC_USER)
+        browser.find_element_by_id('password').send_keys(UPC_PASSWORD)
+        browser.find_element_by_id('submit').click()
+
+        menu = browser.find_element_by_id('menu.billing')
+        hover = webdriver.ActionChains(browser).move_to_element(menu)
+        hover.perform()
+
+        browser.find_element_by_id('menu.billing.unbilled').click()
+        browser.find_element_by_css_selector('#details-types_012042736_control').click()
+        browser.find_element_by_css_selector('#usage-details_012042736_1_control').click()
+
+        return(browser.page_source)
+    else:    
+        return(browser.page_source)
+
+def main():
+    global UPC_USER
+    global UPC_PASSWORD
+    UPC_USER, UPC_PASSWORD = set_credentials()
+
+    display = Display(visible=0, size=(800, 600))
+    display.start()
+
+    browser = webdriver.Firefox()
+    browser.implicitly_wait(30)
+    
+    is_n_active = True
+    total_minutes = 0
+    
+    while is_n_active:
+        html = find_unbilled_usage(browser)
+        soup = BeautifulSoup(html)
+        
+        table = soup.find(id="usage-details_012042736_1")
+        rows = table.findAll('tr')
+        total_minutes = total_minutes + calculate_time (rows)
+        
+        if is_next_active(soup) == True:
+            #click on next
+            browser.find_element_by_css_selector('#usage-details-table_012042736_1_next').click()
+        else: is_n_active = False
+
+    browser.quit()
+    display.stop()
+
+   
+
+    #MESSAGE = "Total time spent calling international numbers: " + str(total_time/60)
+    #conn = boto.sns.connect_to_region( REGION )
+    #pub = conn.publish (topic = TOPIC, message = MESSAGE, subject = "UPC International Calls Usage Alert") 
+    report_result(total_minutes)
+
+
+if __name__ == '__main__':
+    main()
+
